@@ -1,4 +1,4 @@
-# IRNet
+# [IRNet](paper/Towards_Complex_Text-to-SQL_in_Cross-Domain_Database_with_Intermediate_Representation.pdf)
 Code for our ACL'19 accepted paper "Towards Complex Text-to-SQL in Cross-Domain Database with Intermediate Representation"
 
 ## Citation
