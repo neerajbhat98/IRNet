@@ -1,0 +1,5 @@
+nltk==3.4
+pattern
+numpy==1.14.0
+torch==0.4.0
+pytorch-pretrained-bert==0.5.1
