@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-# @Time    : 2019/5/24 下午11:40
+# @Time    : 2019/5/24
 # @Author  : Jiaqi&Zecheng
 # @File    : sql2SemQL.py
 # @Software: PyCharm
 """
 
-import json
-import copy
 import argparse
+import json
 import sys
+
+import copy
 from utils import load_dataSets
+
 sys.path.append("..")
 from src.semQL import Root1, Root, N, A, C, T, Sel, Sup, Filter, Order
 
@@ -371,17 +373,16 @@ if __name__ == '__main__':
 
     # loading dataSets
     datas, table = load_dataSets(args)
+    processed_data = []
 
-    index = range(len(datas))
-
-    count = 0
-    for i, d in zip(index, datas):
+    for i, d in enumerate(datas):
         if len(datas[i]['sql']['select'][1]) > 5:
             continue
         r = parser.full_parse(datas[i])
-        count += 1
         datas[i]['rule_label'] = " ".join([str(x) for x in r])
+        processed_data.append(datas[i])
 
+    print('Finished %s datas and failed %s datas' % (len(processed_data), len(datas) - len(processed_data)))
     with open(args.output, 'w', encoding='utf8') as f:
-        f.write(json.dumps(datas))
+        f.write(json.dumps(processed_data))
 

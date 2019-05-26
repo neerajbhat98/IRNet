@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-# @Time    : 2019/5/24 下午11:04
+# @Time    : 2019/5/24
 # @Author  : Jiaqi&Zecheng
 # @File    : data_process.py
 # @Software: PyCharm

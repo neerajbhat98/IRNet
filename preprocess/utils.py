@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-# @Time    : 2019/5/24 下午11:20
+# @Time    : 2019/5/24
 # @Author  : Jiaqi&Zecheng
 # @File    : utils.py
 # @Software: PyCharm

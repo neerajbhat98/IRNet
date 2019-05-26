@@ -16,5 +16,5 @@ This directory contains the preprocess for origin Spider dataset
 
 `sh run_me.sh ../data/dev.json ../data/tables.json`
 
-The script first performs schema linking over the dataset and schema then generate SemQL base on the SQL query. 
-Note that some self-join cause and groupBy cause can not inferred from SemQL, we exclude them from our [processed dataset](https://drive.google.com/open?id=1YFV1GoLivOMlmunKW0nkzefKULO4wtrn)
+The script first performs schema linking over the dataset and schema and then generate SemQL base on the SQL query. 
+Note that some self-join causes and groupBy causes can not be inferred from SemQL, we exclude them from our [processed dataset](https://drive.google.com/open?id=1YFV1GoLivOMlmunKW0nkzefKULO4wtrn)
