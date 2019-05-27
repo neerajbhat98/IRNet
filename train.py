@@ -15,9 +15,9 @@ import torch.optim as optim
 import tqdm
 
 from src import args as arg
-from src import semQL
 from src import utils
 from src.models.model import IRNet
+from src.rule import semQL
 
 
 def train(args):
@@ -66,12 +66,12 @@ def train(args):
 
     json_datas = utils.epoch_acc(model, args.batch_size, val_sql_data, val_table_data,
                            beam_size=args.beam_size)
-    import json
-    with open('./predict_lf.json', 'w') as f:
-        json.dump(json_datas, f)
+    utils.eval_acc(json_datas, val_sql_data)
+    # import json
+    # with open('./predict_lf.json', 'w') as f:
+    #     json.dump(json_datas, f)
 
 
-    quit()
 
 
     # begin train
@@ -86,26 +86,13 @@ def train(args):
                 if args.lr_scheduler:
                     scheduler.step()
                 epoch_begin = time.time()
-                loss = epoch_train(model, optimizer, args.batch_size, sql_data, table_data, schemas, args,
-                                   is_sketch=is_sketch,
-                                   has_pos_tags=pos_tags is not None,
-                                   is_encode_dependency=args.encode_dependency,
-                                   is_encode_entity=args.encode_entity, epoch=epoch,
-                                   use_stanford_tokenized=args.stanford_tokenized,
+                loss = utils.epoch_train(model, optimizer, args.batch_size, sql_data, table_data, args,
                                    loss_epoch_threshold=args.loss_epoch_threshold,
                                    sketch_loss_coefficient=args.sketch_loss_coefficient)
                 epoch_end = time.time()
-
-                sketch_acc, acc, _, (right, wrong, _), write_data = epoch_acc(model, args.batch_size, val_sql_data,
-                                                                              val_table_data,
-                                                                              schemas,
-                                                                              beam_size=args.beam_size,
-                                                                              is_sketch=is_sketch,
-                                                                              has_pos_tags=pos_tags is not None,
-                                                                              is_encode_dependency=args.encode_dependency,
-                                                                              is_encode_entity=args.encode_entity,
-                                                                              use_stanford_tokenized=args.stanford_tokenized)
-
+                json_datas = utils.epoch_acc(model, args.batch_size, val_sql_data, val_table_data,
+                                             beam_size=args.beam_size)
+                acc = utils.eval_acc(json_datas, val_sql_data)
 
                 if acc > best_dev_acc:
                     utils.save_checkpoint(model, os.path.join(model_save_path, 'best_model.model'))
@@ -113,7 +100,7 @@ def train(args):
                 utils.save_checkpoint(model, os.path.join(model_save_path, '{%s}_{%s}.model') % (epoch, acc))
 
                 log_str = 'Epoch: %d, Loss: %f, Sketch Acc: %f, Acc: %f, time: %f\n' % (
-                    epoch + 1, loss, sketch_acc, acc, epoch_end - epoch_begin)
+                    epoch + 1, loss, acc, acc, epoch_end - epoch_begin)
                 tqdm.tqdm.write(log_str)
                 epoch_fd.write(log_str)
                 epoch_fd.flush()
@@ -125,14 +112,11 @@ def train(args):
         print(tb)
     else:
         utils.save_checkpoint(model, os.path.join(model_save_path, 'end_model.model'))
-        sketch_acc, acc, beam_acc, (right, wrong, _), write_data = epoch_acc(model, args.batch_size, val_sql_data,
-                                                                             val_table_data, schemas,
-                                                                             beam_size=args.beam_size,
-                                                                             is_sketch=is_sketch,
-                                                                             has_pos_tags=pos_tags is not None,
-                                                                             is_encode_dependency=args.encode_dependency,
-                                                                             is_encode_entity=args.encode_entity)
-        print("Sketch Acc: %f, Acc: %f, Beam Acc: %f" % (sketch_acc, acc, beam_acc,))
+        json_datas = utils.epoch_acc(model, args.batch_size, val_sql_data, val_table_data,
+                                     beam_size=args.beam_size)
+        acc = utils.eval_acc(json_datas, val_sql_data)
+
+        print("Sketch Acc: %f, Acc: %f, Beam Acc: %f" % (acc, acc, acc,))
 
 
 if __name__ == '__main__':

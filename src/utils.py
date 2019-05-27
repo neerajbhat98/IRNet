@@ -6,15 +6,19 @@
 # @Software: PyCharm
 """
 
-import os
 import json
 import time
+
 import copy
-import torch
 import numpy as np
+import os
+import torch
+from nltk.stem import WordNetLemmatizer
 
 from src.dataset import Example
-from nltk.stem import WordNetLemmatizer
+from src.rule import lf
+from src.rule.semQL import Sup, Sel, Order, Root, Filter, A, N, C, T, Root1
+
 wordnet_lemmatizer = WordNetLemmatizer()
 
 
@@ -141,9 +145,25 @@ def process(sql, table):
 
     return process_dict
 
+def is_valid(rule_label, col_table_dict, sql):
+    try:
+        lf.build_tree(copy.copy(rule_label))
+    except:
+        print(rule_label)
+
+    flag = False
+    for r_id, rule in enumerate(rule_label):
+        if type(rule) == C:
+            try:
+                assert rule_label[r_id + 1].id_c in col_table_dict[rule.id_c], print(sql['question'])
+            except:
+                flag = True
+                print(sql['question'])
+    return flag is False
+
 
 def to_batch_seq(sql_data, table_data, idxes, st, ed,
-                 is_train=True,):
+                 is_train=True):
     """
 
     :return:
@@ -169,6 +189,12 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed,
 
         process_dict['col_set_iter'][0] = ['count', 'number', 'many']
 
+        rule_label = None
+        if 'rule_label' in sql:
+            rule_label = [eval(x) for x in sql['rule_label'].strip().split(' ')]
+            if is_valid(rule_label, col_table_dict=col_table_dict, sql=sql) is False:
+                continue
+
         example = Example(
             src_sent=process_dict['question_arg'],
             col_num=len(process_dict['col_set_iter']),
@@ -183,7 +209,8 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed,
             cols=process_dict['tab_cols'],
             table_col_name=table_col_name,
             table_col_len=len(table_col_name),
-            tokenized_src_sent=process_dict['col_set_type']
+            tokenized_src_sent=process_dict['col_set_type'],
+            tgt_actions=rule_label
         )
         example.sql_json = copy.deepcopy(sql)
         examples.append(example)
@@ -193,6 +220,38 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed,
         return examples
     else:
         return examples
+
+def epoch_train(model, optimizer, batch_size, sql_data, table_data,
+                args, epoch=0, loss_epoch_threshold=20, sketch_loss_coefficient=0.2):
+    model.train()
+    # shuffe
+    perm=np.random.permutation(len(sql_data))
+    cum_loss = 0.0
+    st = 0
+    while st < len(sql_data):
+        ed = st+batch_size if st+batch_size < len(perm) else len(perm)
+        examples = to_batch_seq(sql_data, table_data, perm, st, ed)
+        optimizer.zero_grad()
+
+        score = model.forward(examples)
+        loss_sketch = -score[0]
+        loss_lf = -score[1]
+
+        loss_sketch = torch.mean(loss_sketch)
+        loss_lf = torch.mean(loss_lf)
+
+        if epoch > loss_epoch_threshold:
+            loss = loss_lf + sketch_loss_coefficient * loss_sketch
+        else:
+            loss = loss_lf + loss_sketch
+
+        loss.backward()
+        if args.clip_grad > 0.:
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad)
+        optimizer.step()
+        cum_loss += loss.data.cpu().numpy()*(ed - st)
+        st = ed
+    return cum_loss / len(sql_data)
 
 def epoch_acc(model, batch_size, sql_data, table_data, beam_size=3):
     model.eval()
@@ -214,18 +273,28 @@ def epoch_acc(model, batch_size, sql_data, table_data, beam_size=3):
                 for x in results:
                     list_preds.append(" ".join(str(x.actions)))
             except Exception as e:
-                print('Epoch Acc: ', e)
-                print(results)
-                print(results_all)
+                # print('Epoch Acc: ', e)
+                # print(results)
+                # print(results_all)
                 pred = ""
 
             simple_json = example.sql_json['pre_sql']
 
+            simple_json['sketch_result'] =  " ".join(str(x) for x in results_all[1])
             simple_json['model_result'] = pred
 
             json_datas.append(simple_json)
         st = ed
     return json_datas
+
+def eval_acc(preds, sqls):
+    sketch_correct, best_correct = 0, 0
+    for i, (pred, sql) in enumerate(zip(preds, sqls)):
+        if pred['model_result'] == sql['rule_label']:
+            best_correct += 1
+    print(best_correct / len(preds))
+    return best_correct / len(preds)
+
 
 def load_data_new(sql_path, table_data, use_small=False):
     sql_data = []

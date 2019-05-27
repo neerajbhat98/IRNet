@@ -12,12 +12,12 @@ import torch.nn.functional as F
 import torch.nn.utils
 from torch.autograd import Variable
 
-from src import semQL as define_rule
 from src.beam import Beams, ActionInfo
 from src.dataset import Batch
 from src.models import nn_utils
 from src.models.basic_model import BasicModel
 from src.models.pointer_net import PointerNet
+from src.rule import semQL as define_rule
 
 
 class IRNet(BasicModel):
@@ -99,8 +99,251 @@ class IRNet(BasicModel):
         nn.init.xavier_normal_(self.N_embed.weight.data)
         print('Use Column Pointer: ', True if self.use_column_pointer else False)
         
-    def forward(self):
-        pass
+    def forward(self, examples):
+        args = self.args
+        # now should implement the examples
+        batch = Batch(examples, self.grammar, cuda=self.args.cuda)
+
+        table_appear_mask = batch.table_appear_mask
+
+
+        src_encodings, (last_state, last_cell) = self.encode(batch.src_sents, batch.src_sents_len, None)
+
+        src_encodings = self.dropout(src_encodings)
+
+        utterance_encodings_sketch_linear = self.att_sketch_linear(src_encodings)
+        utterance_encodings_lf_linear = self.att_lf_linear(src_encodings)
+
+        dec_init_vec = self.init_decoder_state(last_cell)
+        h_tm1 = dec_init_vec
+        action_probs = [[] for _ in examples]
+
+        zero_action_embed = Variable(self.new_tensor(args.action_embed_size).zero_())
+        zero_type_embed = Variable(self.new_tensor(args.type_embed_size).zero_())
+
+        sketch_attention_history = list()
+
+        for t in range(batch.max_sketch_num):
+            if t == 0:
+                x = Variable(self.new_tensor(len(batch), self.sketch_decoder_lstm.input_size).zero_(),
+                             requires_grad=False)
+            else:
+                a_tm1_embeds = []
+                pre_types = []
+                for e_id, example in enumerate(examples):
+
+                    if t < len(example.sketch):
+                        # get the last action
+                        # This is the action embedding
+                        action_tm1 = example.sketch[t - 1]
+                        if type(action_tm1) in [define_rule.Root1,
+                                                define_rule.Root,
+                                                define_rule.Sel,
+                                                define_rule.Filter,
+                                                define_rule.Sup,
+                                                define_rule.N,
+                                                define_rule.Order]:
+                            a_tm1_embed = self.production_embed.weight[self.grammar.prod2id[action_tm1.production]]
+                        else:
+                            print(action_tm1, 'only for sketch')
+                            quit()
+                            a_tm1_embed = zero_action_embed
+                            pass
+                    else:
+                        a_tm1_embed = zero_action_embed
+
+                    a_tm1_embeds.append(a_tm1_embed)
+
+                a_tm1_embeds = torch.stack(a_tm1_embeds)
+                inputs = [a_tm1_embeds]
+
+                for e_id, example in enumerate(examples):
+                    if t < len(example.sketch):
+                        action_tm = example.sketch[t - 1]
+                        pre_type = self.type_embed.weight[self.grammar.type2id[type(action_tm)]]
+                    else:
+                        pre_type = zero_type_embed
+                    pre_types.append(pre_type)
+
+                pre_types = torch.stack(pre_types)
+
+                inputs.append(att_tm1)
+                inputs.append(pre_types)
+                x = torch.cat(inputs, dim=-1)
+
+            src_mask = batch.src_token_mask
+
+            (h_t, cell_t), att_t, aw = self.step(x, h_tm1, src_encodings,
+                                                 utterance_encodings_sketch_linear, self.sketch_decoder_lstm,
+                                                 self.sketch_att_vec_linear,
+                                                 src_token_mask=src_mask, return_att_weight=True)
+            sketch_attention_history.append(att_t)
+
+            # get the Root possibility
+            apply_rule_prob = F.softmax(self.production_readout(att_t), dim=-1)
+
+            for e_id, example in enumerate(examples):
+                if t < len(example.sketch):
+                    action_t = example.sketch[t]
+                    act_prob_t_i = apply_rule_prob[e_id, self.grammar.prod2id[action_t.production]]
+                    action_probs[e_id].append(act_prob_t_i)
+
+            h_tm1 = (h_t, cell_t)
+            att_tm1 = att_t
+
+        sketch_prob_var = torch.stack(
+            [torch.stack(action_probs_i, dim=0).log().sum() for action_probs_i in action_probs], dim=0)
+
+        table_embedding = self.gen_x_batch(batch.table_sents)
+        src_embedding = self.gen_x_batch(batch.src_sents)
+        schema_embedding = self.gen_x_batch(batch.table_names)
+
+        # get emb differ
+        embedding_differ = self.embedding_cosine(src_embedding=src_embedding, table_embedding=table_embedding,
+                                                 table_unk_mask=batch.table_unk_mask)
+
+        schema_differ = self.embedding_cosine(src_embedding=src_embedding, table_embedding=schema_embedding,
+                                              table_unk_mask=batch.schema_token_mask)
+
+        tab_ctx = (src_encodings.unsqueeze(1) * embedding_differ.unsqueeze(3)).sum(2)
+        schema_ctx = (src_encodings.unsqueeze(1) * schema_differ.unsqueeze(3)).sum(2)
+
+
+        table_embedding = table_embedding + tab_ctx
+
+        schema_embedding = schema_embedding + schema_ctx
+
+        col_type = self.input_type(batch.col_hot_type)
+
+        col_type_var = self.col_type(col_type)
+
+        table_embedding = table_embedding + col_type_var
+
+        batch_table_dict = batch.col_table_dict
+        table_enable = np.zeros(shape=(len(examples)))
+        action_probs = [[] for _ in examples]
+
+        h_tm1 = dec_init_vec
+
+        for t in range(batch.max_action_num):
+            if t == 0:
+                # x = self.lf_begin_vec.unsqueeze(0).repeat(len(batch), 1)
+                x = Variable(self.new_tensor(len(batch), self.lf_decoder_lstm.input_size).zero_(), requires_grad=False)
+            else:
+                a_tm1_embeds = []
+                pre_types = []
+
+                for e_id, example in enumerate(examples):
+                    if t < len(example.tgt_actions):
+                        action_tm1 = example.tgt_actions[t - 1]
+                        if type(action_tm1) in [define_rule.Root1,
+                                                define_rule.Root,
+                                                define_rule.Sel,
+                                                define_rule.Filter,
+                                                define_rule.Sup,
+                                                define_rule.N,
+                                                define_rule.Order,
+                                                ]:
+
+                            a_tm1_embed = self.production_embed.weight[self.grammar.prod2id[action_tm1.production]]
+
+                        else:
+                            if isinstance(action_tm1, define_rule.C):
+                                a_tm1_embed = self.column_rnn_input(table_embedding[e_id, action_tm1.id_c])
+                            elif isinstance(action_tm1, define_rule.T):
+                                a_tm1_embed = self.column_rnn_input(schema_embedding[e_id, action_tm1.id_c])
+                            elif isinstance(action_tm1, define_rule.A):
+                                a_tm1_embed = self.production_embed.weight[self.grammar.prod2id[action_tm1.production]]
+                            else:
+                                print(action_tm1, 'not implement')
+                                quit()
+                                a_tm1_embed = zero_action_embed
+                                pass
+
+                    else:
+                        a_tm1_embed = zero_action_embed
+                    a_tm1_embeds.append(a_tm1_embed)
+
+                a_tm1_embeds = torch.stack(a_tm1_embeds)
+
+                inputs = [a_tm1_embeds]
+
+                # tgt t-1 action type
+                for e_id, example in enumerate(examples):
+                    if t < len(example.tgt_actions):
+                        action_tm = example.tgt_actions[t - 1]
+                        pre_type = self.type_embed.weight[self.grammar.type2id[type(action_tm)]]
+                    else:
+                        pre_type = zero_type_embed
+                    pre_types.append(pre_type)
+
+                pre_types = torch.stack(pre_types)
+
+                inputs.append(att_tm1)
+
+                inputs.append(pre_types)
+
+                x = torch.cat(inputs, dim=-1)
+
+            src_mask = batch.src_token_mask
+
+            (h_t, cell_t), att_t, aw = self.step(x, h_tm1, src_encodings,
+                                                 utterance_encodings_lf_linear, self.lf_decoder_lstm,
+                                                 self.lf_att_vec_linear,
+                                                 src_token_mask=src_mask, return_att_weight=True)
+
+            apply_rule_prob = F.softmax(self.production_readout(att_t), dim=-1)
+            table_appear_mask_val = torch.from_numpy(table_appear_mask)
+            if self.cuda:
+                table_appear_mask_val = table_appear_mask_val.cuda()
+
+            if self.use_column_pointer:
+                gate = F.sigmoid(self.prob_att(att_t))
+                weights = self.column_pointer_net(src_encodings=table_embedding, query_vec=att_t.unsqueeze(0),
+                                                  src_token_mask=None) * table_appear_mask_val * gate + self.column_pointer_net(
+                    src_encodings=table_embedding, query_vec=att_t.unsqueeze(0),
+                    src_token_mask=None) * (1 - table_appear_mask_val) * (1 - gate)
+            else:
+                weights = self.column_pointer_net(src_encodings=table_embedding, query_vec=att_t.unsqueeze(0),
+                                                  src_token_mask=batch.table_token_mask)
+
+            weights.data.masked_fill_(batch.table_token_mask, -float('inf'))
+
+            column_attention_weights = F.softmax(weights, dim=-1)
+
+            table_weights = self.table_pointer_net(src_encodings=schema_embedding, query_vec=att_t.unsqueeze(0),
+                                                   src_token_mask=None)
+
+            schema_token_mask = batch.schema_token_mask.expand_as(table_weights)
+            table_weights.data.masked_fill_(schema_token_mask, -float('inf'))
+            table_dict = [batch_table_dict[x_id][int(x)] for x_id, x in enumerate(table_enable.tolist())]
+            table_mask = batch.table_dict_mask(table_dict)
+            table_weights.data.masked_fill_(table_mask, -float('inf'))
+
+            table_weights = F.softmax(table_weights, dim=-1)
+            # now get the loss
+            for e_id, example in enumerate(examples):
+                if t < len(example.tgt_actions):
+                    action_t = example.tgt_actions[t]
+                    if isinstance(action_t, define_rule.C):
+                        table_appear_mask[e_id, action_t.id_c] = 1
+                        table_enable[e_id] = action_t.id_c
+                        act_prob_t_i = column_attention_weights[e_id, action_t.id_c]
+                        action_probs[e_id].append(act_prob_t_i)
+                    elif isinstance(action_t, define_rule.T):
+                        act_prob_t_i = table_weights[e_id, action_t.id_c]
+                        action_probs[e_id].append(act_prob_t_i)
+                    elif isinstance(action_t, define_rule.A):
+                        act_prob_t_i = apply_rule_prob[e_id, self.grammar.prod2id[action_t.production]]
+                        action_probs[e_id].append(act_prob_t_i)
+                    else:
+                        pass
+            h_tm1 = (h_t, cell_t)
+            att_tm1 = att_t
+        lf_prob_var = torch.stack(
+            [torch.stack(action_probs_i, dim=0).log().sum() for action_probs_i in action_probs], dim=0)
+
+        return [sketch_prob_var, lf_prob_var]
 
     def parse(self, examples, beam_size=5):
         """

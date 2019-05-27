@@ -6,15 +6,17 @@
 # @Software: PyCharm
 """
 
+import numpy as np
 import os
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.nn.utils
 from torch.autograd import Variable
-import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
-import numpy as np
-from src import semQL as define_rule
+
+from src.rule import semQL as define_rule
+
 
 class BasicModel(nn.Module):
 
