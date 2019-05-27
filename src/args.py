@@ -15,17 +15,12 @@ def init_arg_parser():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--seed', default=5783287, type=int, help='random seed')
     arg_parser.add_argument('--cuda', action='store_true', help='use gpu')
-    arg_parser.add_argument('--encode_dependency', action='store_true', help='encode dependency')
-    arg_parser.add_argument('--encode_entity', action='store_true', help='encode entity')
     arg_parser.add_argument('--lr_scheduler', action='store_true', help='use learning rate scheduler')
     arg_parser.add_argument('--lr_scheduler_gammar', default=0.5, type=float, help='decay rate of learning rate scheduler')
     arg_parser.add_argument('--column_pointer', action='store_true', help='use column pointer')
     arg_parser.add_argument('--loss_epoch_threshold', default=20, type=int, help='loss epoch threshold')
     arg_parser.add_argument('--sketch_loss_coefficient', default=0.2, type=float, help='sketch loss coefficient')
     arg_parser.add_argument('--sentence_features', action='store_true', help='use sentence features')
-    arg_parser.add_argument('--lang', choices=['python', 'lambda_dcs', 'wikisql', 'prolog'], default='python')
-    arg_parser.add_argument('--mode', choices=['train', 'self_train', 'train_decoder', 'train_semi', 'log_semi', 'test',
-                                               'sample'], default='train', help='run mode')
     arg_parser.add_argument('--model_name', choices=['transformer', 'rnn', 'table', 'sketch'], default='rnn',
                             help='model name')
 
@@ -61,25 +56,15 @@ def init_arg_parser():
     arg_parser.add_argument('--save_to', default='model', type=str, help='save trained model to')
     arg_parser.add_argument('--toy', action='store_true',
                             help='If set, use small data; used for fast debugging.')
-    arg_parser.add_argument('--save_all_models', default=False, action='store_true')
-    arg_parser.add_argument('--save_decode_to', default=None, type=str, help='save decoding results to file')
-    arg_parser.add_argument('--patience', default=5, type=int, help='training patience')
-    arg_parser.add_argument('--max_num_trial', default=10, type=int)
-    arg_parser.add_argument('--uniform_init', default=None, type=float,
-                            help='if specified, use uniform initialization for all parameters')
-    arg_parser.add_argument('--glorot_init', default=False, action='store_true')
     arg_parser.add_argument('--clip_grad', default=5., type=float, help='clip gradients')
     arg_parser.add_argument('--max_epoch', default=-1, type=int, help='maximum number of training epoches')
     arg_parser.add_argument('--optimizer', default='Adam', type=str, help='optimizer')
     arg_parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
 
-    arg_parser.add_argument('--lr_decay_after_epoch', default=0, type=int)
-    arg_parser.add_argument('--reset_optimizer', action='store_true', default=False)
-
     arg_parser.add_argument('--dataset', default="./data", type=str)
 
     arg_parser.add_argument('--epoch', default=50, type=int, help='Maximum Epoch')
-    arg_parser.add_argument('--save', default='', type=str,
+    arg_parser.add_argument('--save', default='./', type=str,
                             help="Path to save the checkpoint and logs of epoch")
 
     return arg_parser

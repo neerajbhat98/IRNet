@@ -30,7 +30,7 @@ Install Python dependency: `pip install -r requirements.txt`
 
 ## Running Code
 
-### Data preparation
+#### Data preparation
 
 
 * Download [Glove Embedding](https://nlp.stanford.edu/data/wordvecs/glove.42B.300d.zip) and put `glove.42B.300d` under `./data/` directory
@@ -39,24 +39,24 @@ IRNet_pretrained.model` under `./saved_model/` directory
 * Download preprocessed train/dev datasets from [here](https://drive.google.com/open?id=1YFV1GoLivOMlmunKW0nkzefKULO4wtrn) and put `train.json`, `dev.json` and 
 `tables.json` under `./data/` directory
 
-#### Generating train/dev data by yourself
+##### Generating train/dev data by yourself
 You could process the origin [Spider Data](https://drive.google.com/uc?export=download&id=11icoH_EA-NYb0OrPTdehRWm_d7-DIzWX) by your own. Download  and put `train.json`, `dev.json` and 
 `tables.json` under `./data/` directory and follow the instruction on `./preprocess/`
 
-### Training
+#### Training
 
 Run `train.sh` to train IRNet.
 
 `sh train.sh [GPU_ID] [SAVE_FOLD]`
 
-### Testing
+#### Testing
 
 Run `eval.sh` to eval IRNet.
 
 `sh eval.sh [GPU_ID] [OUTPUT_FOLD]`
 
 
-### Evaluation
+#### Evaluation
 
 You could follow the general evaluation process in [Spider Page](https://github.com/taoyds/spider)
 

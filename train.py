@@ -13,6 +13,7 @@ import os
 import torch
 import torch.optim as optim
 import tqdm
+import copy
 
 from src import args as arg
 from src import utils
@@ -51,7 +52,6 @@ def train(args):
         print('load pretrained model from %s'% (args.load_model))
         pretrained_model = torch.load(args.load_model,
                                          map_location=lambda storage, loc: storage)
-        import copy
         pretrained_modeled = copy.deepcopy(pretrained_model)
         for k in pretrained_model.keys():
             if k not in model.state_dict().keys():
@@ -59,21 +59,7 @@ def train(args):
 
         model.load_state_dict(pretrained_modeled)
 
-    # model.word_emb = utils.load_word_emb(args.glove_embed_path)
-    import pickle
-    with open('/home/zzc/nl2sql/word_emb', 'rb') as f:
-        model.word_emb = pickle.load(f)
-
-    json_datas = utils.epoch_acc(model, args.batch_size, val_sql_data, val_table_data,
-                           beam_size=args.beam_size)
-    utils.eval_acc(json_datas, val_sql_data)
-    # import json
-    # with open('./predict_lf.json', 'w') as f:
-    #     json.dump(json_datas, f)
-
-
-
-
+    model.word_emb = utils.load_word_emb(args.glove_embed_path)
     # begin train
 
     model_save_path = utils.init_log_checkpoint_path(args)

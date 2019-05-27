@@ -39,10 +39,7 @@ def evaluate(args):
 
     model.load_state_dict(pretrained_modeled)
 
-    # model.word_emb = utils.load_word_emb(args.glove_embed_path)
-    import pickle
-    with open('/home/zzc/nl2sql/word_emb', 'rb') as f:
-        model.word_emb = pickle.load(f)
+    model.word_emb = utils.load_word_emb(args.glove_embed_path)
 
     json_datas = utils.epoch_acc(model, args.batch_size, val_sql_data, val_table_data,
                            beam_size=args.beam_size)
