@@ -23,8 +23,9 @@ note={version 1}
 
 ## Environment Setup
 
+* `Ubuntu 16.04`
 * `Python3.6`
-* `Pytorch 0.4.0` or higher
+* `Pytorch 1.0.0` or higher
 
 Install Python dependency: `pip install -r requirements.txt`
 

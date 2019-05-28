@@ -1,6 +1,6 @@
 nltk==3.4
 pattern
 numpy==1.14.0
-torch==0.4.1
+torch==1.0.1
 pytorch-pretrained-bert==0.5.1
 tqdm==4.31.1
