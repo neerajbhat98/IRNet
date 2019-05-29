@@ -190,7 +190,7 @@ def to_batch_seq(sql_data, table_data, idxes, st, ed,
         process_dict['col_set_iter'][0] = ['count', 'number', 'many']
 
         rule_label = None
-        if 'rule_label' in sql:
+        if 'rule_label' in sql and is_train:
             # handle the subquery on From cause
             if 'from' in sql['rule_label']:
                 continue
