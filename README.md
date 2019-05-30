@@ -13,6 +13,6 @@ author={Jiaqi Guo and Zecheng Zhan and Yan Gao and Yan Xiao and Jian-Guang Lou a
 title={Towards Complex Text-to-SQL in Cross-Domain Database with Intermediate Representation},
 journal={arXiv preprint arXiv:1905.08205},
 year={2019},
-note={version 1}
+note={version 2}
 }
 ```
